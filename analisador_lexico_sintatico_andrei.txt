@@ -1,0 +1,451 @@
+
+/* =======================================================
+   Arquivo: trabalho_corrigido_corrigido.jison
+   Autor: Andrei Alves Fracalossi
+   Descrição: Gramática Jison com funções, múltiplas
+   variáveis, ponteiros e suporte a arrays e operadores.
+   ======================================================= */
+
+%lex
+%%
+
+\s+                     /* ignora espaços em branco */
+"//".*                  /* ignora comentário de linha */
+
+/* Diretivas de pré-processador */
+\#include[ \t]*\<[^>\n]+\>    yytext = yytext.trim(); return 'INCLUDE';
+\#include[ \t]*\"[^"\n]+\"    yytext = yytext.trim(); return 'INCLUDE';
+\#define[ \t]+[a-zA-Z_][a-zA-Z0-9_]*([ \t]+[^\n]+)?   yytext = yytext.trim(); return 'DEFINE';
+
+// Tipos básicos
+"int"       return 'INT_TYPE';
+"float"     return 'FLOAT_TYPE';
+"double"    return 'DOUBLE_TYPE';
+"char"      return 'CHAR_TYPE';
+"void"      return 'VOID_TYPE';
+"short"     return 'SHORT_TYPE';
+"long"      return 'LONG_TYPE';
+"signed"    return 'SIGNED_TYPE';
+"unsigned"  return 'UNSIGNED_TYPE';
+
+
+// Palavras reservadas
+"if"        return 'IF';
+"else"      return 'ELSE';
+"while"     return 'WHILE';
+"do"        return 'DO';
+"for"       return 'FOR';
+"return"    return 'RETURN';
+"printf"    return 'PRINTF';
+"scanf"     return 'SCANF';
+"switch"       return 'SWITCH';
+"case"         return 'CASE';
+"default"      return 'DEFAULT';
+":"            return ':';
+"sizeof"        return 'SIZEOF';
+"break"     return 'BREAK';
+"struct"    return 'STRUCT';
+"union"    return 'UNION';
+"enum"     return 'ENUM';
+"const"    return 'CONST';
+"volatile"   return 'VOLATILE';
+
+// Operadores múltiplos
+"=="        return 'EQ';
+"!="        return 'NE';
+"<="        return 'LE';
+">="        return 'GE';
+"++"        return 'INC';
+"--"        return 'DEC';
+"&&"        return 'AND';
+"||"        return 'OR';
+"!"         return 'NOT';
+"true"      return 'TRUE';
+"false"     return 'FALSE';
+
+"+="        return 'PLUSEQ';
+"-="        return 'MINUSEQ';
+"*="        return 'MULTEQ';
+"/="        return 'DIVEQ';
+
+// Operadores simples
+"="         return '=';
+"<"         return '<';
+">"         return '>';
+"+"         return '+';
+"-"         return '-';
+"*"         return '*';
+"/"         return '/';
+"%"         return '%';
+"&"         return '&';
+
+// Delimitadores
+"("         return '(';
+")"         return ')';
+"{"         return '{';
+"}"         return '}';
+";"         return ';';
+","         return ',';
+"["         return '[';
+"]"         return ']';
+
+// Literais
+[0-9]+\.[0-9]+          yytext = parseFloat(yytext); return 'FLOAT';
+[0-9]+                   yytext = Number(yytext); return 'NUM';
+\"[^"]*\"               return 'STRING';
+\'[^\']\'               return 'CHAR';
+
+// Identificadores
+[a-zA-Z_][a-zA-Z0-9_]*  return 'ID';
+
+<<EOF>>                 return 'EOF';
+
+/lex
+
+%start programa
+%%
+
+programa
+    : diretivas declaracoes EOF     { return { diretivas: $1, body: $2 }; }
+    ;
+
+diretivas
+    : diretivas diretiva    { $$ = $1.concat([$2]); }
+    | /* vazio */           { $$ = []; }
+    ;
+
+diretiva
+    : INCLUDE               { $$ = { tipo: 'include', texto: yytext }; }
+    | DEFINE                { $$ = { tipo: 'define', texto: yytext }; }
+    ;
+
+declaracoes
+    : declaracoes declaracao        { $$ = $1.concat([$2]); }
+    | declaracao                     { $$ = [$1]; }
+
+    ;
+
+declaracao
+    : funcao
+    | comando
+    | struct_declaracao   /* ✅ permite struct standalone */
+    | union_declaracao                { $$ = [$1]; }
+    | enum_declaracao                 { $$ = [$1]; }
+    ;
+
+struct_declaracao
+    : STRUCT ID '{' struct_campos '}' ';'
+        { $$ = { kind: 'struct', nome: $2, campos: $4 }; }
+    ;
+
+struct_campos
+    : struct_campos struct_campo
+        { $$ = $1.concat([$2]); }
+    | struct_campo
+        { $$ = [$1]; }
+    ;
+
+struct_campo
+    : tipo declaracao_lista ';'
+        { $$ = { tipo: $1, vars: $2 }; }
+    ;
+
+union_declaracao
+    : UNION ID '{' union_campos '}' ';'
+        { $$ = { kind: 'union', nome: $2, campos: $4 }; }
+    ;
+
+union_campos
+    : union_campos union_campo
+        { $$ = $1.concat([$2]); }
+    | union_campo
+        { $$ = [$1]; }
+    ;
+
+union_campo
+    : tipo declaracao_lista ';'
+        { $$ = { tipo: $1, vars: $2 }; }
+    ;
+
+enum_declaracao
+    : ENUM ID '{' enum_lista '}' ';'
+        { $$ = { kind: 'enum', nome: $2, valores: $4 }; }
+    ;
+
+enum_lista
+    : enum_lista ',' ID          { $$ = $1.concat([$3]); }
+    | ID                         { $$ = [$1]; }
+    ;
+
+
+
+
+
+declaracao_simples_lista
+    : declaracao_simples                     { $$ = [$1]; }
+    | declaracao_simples ',' declaracao_simples_lista { $$ = [$1].concat($3); }
+    ;
+
+
+
+
+tipo
+    : CONST tipo        { $$ = 'const ' + $2; }
+    | VOLATILE tipo    { $$ = 'volatile ' + $2; }
+
+    | INT_TYPE                         { $$ = 'int'; }
+    | FLOAT_TYPE                       { $$ = 'float'; }
+    | DOUBLE_TYPE                      { $$ = 'double'; }
+    | CHAR_TYPE                        { $$ = 'char'; }
+    | VOID_TYPE                        { $$ = 'void'; }
+    | SHORT_TYPE                        { $$ = 'short'; }
+    | LONG_TYPE                         { $$ = 'long'; }
+    | SIGNED_TYPE tipo                  { $$ = 'signed ' + $2; }
+    | UNSIGNED_TYPE tipo                { $$ = 'unsigned ' + $2; }
+    | LONG_TYPE tipo                    { $$ = 'long ' + $2; }
+    | SHORT_TYPE tipo                   { $$ = 'short ' + $2; }
+    | STRUCT ID           { $$ = 'struct ' + $2; }
+    ;
+
+
+funcao
+    : tipo ID '(' parametros ')' '{' comandos '}' 
+        { $$ = { funcao: $2, tipo: $1, params: $4, corpo: $7 }; }
+    | tipo ID '(' parametros ')' ';'
+        { $$ = { funcao: $2, tipo: $1, params: $4, corpo: null }; }  // protótipo
+    ;
+
+
+parametros
+    : parametro ',' parametros  { $$ = [$1].concat($3); }
+    | parametro                 { $$ = [$1]; }
+    | /* vazio */               { $$ = []; }
+    ;
+
+parametro
+    : tipo '*' ID   { $$ = { tipo: $1 + '*', nome: $3 }; }
+    | tipo ID       { $$ = { tipo: $1, nome: $2 }; }
+    ;
+
+
+initializer
+    : '{' initializer_list '}'   { $$ = $2; }
+    | '{' '}'                    { $$ = []; }
+    ;
+
+initializer_list
+    : initializer ',' initializer_list   { $$ = [$1].concat($3); }
+    | initializer                         { $$ = [$1]; }
+    | expressao ',' initializer_list      { $$ = [$1].concat($3); }  // misto de expressões e iniciais
+    | expressao                            { $$ = [$1]; }
+    ;
+
+
+expressao_list
+    : expressao ',' expressao_list   { $$ = [$1].concat($3); }
+    | expressao                       { $$ = [$1]; }
+    ;
+
+declaracao_lista
+    : declaracao_simples                     { $$ = [$1]; }
+    | declaracao_simples ',' declaracao_lista { $$ = [$1].concat($3); }
+    ;
+array_tamanho
+    : NUM        { $$ = $1; }
+    | ID         { $$ = $1; }
+    ;
+
+declaracao_simples
+    // variável simples
+    : ID
+        { $$ = { kind: 'var', ponteiro: false, nome: $1, valor: null }; }
+    | ID '=' expressao
+        { $$ = { kind: 'var', ponteiro: false, nome: $1, valor: $3 }; }
+    | '*' ID
+        { $$ = { kind: 'var', ponteiro: true, nome: $2, valor: null }; }
+    | '*' ID '=' expressao
+        { $$ = { kind: 'var', ponteiro: true, nome: $2, valor: $4 }; }
+
+    // array simples
+    | ID '[' array_tamanho ']'
+        { $$ = { kind: 'array', ponteiro: false, nome: $1, tamanho: $3, valor: null }; }
+
+    // array com initializer
+    | ID '[' array_tamanho ']' '=' initializer
+        { $$ = { kind: 'array', ponteiro: false, nome: $1, tamanho: $3, valor: $6 }; }
+
+    // array multidimensional
+    | ID array_dimensoes
+        { $$ = { kind: 'array', ponteiro: false, nome: $1, dimensoes: $2, valor: null }; }
+
+    // array multidimensional com initializer
+    | ID array_dimensoes '=' initializer
+        { $$ = { kind: 'array', ponteiro: false, nome: $1, dimensoes: $2, valor: $4 }; }
+
+    // para structs/unions com initializer
+    | STRUCT ID ID '=' initializer
+        { $$ = { kind: 'struct', nome_tipo: $2, nome: $3, valor: $5 }; }
+
+    | UNION ID ID '=' initializer
+        { $$ = { kind: 'union', nome_tipo: $2, nome: $3, valor: $5 }; }
+    ;
+
+array_dimensoes
+    : '[' array_tamanho ']'                { $$ = [$2]; }
+    | '[' array_tamanho ']' array_dimensoes { $$ = [$2].concat($4); }
+    ;
+
+
+
+
+
+comandos
+    : comandos comando { $$ = $1.concat([$2]); }
+    | comando          { $$ = [$1]; }
+    ;
+
+comando
+    // Declaração de variáveis
+    : tipo declaracao_lista ';'           { $$ = { decl: { tipo: $1, vars: $2 } }; }
+
+    // Atribuições
+    | ID '=' expressao ';'                { $$ = { atrib: $1, op: '=', valor: $3 }; }
+    | ID PLUSEQ expressao ';'             { $$ = { atrib: $1, op: '+=', valor: $3 }; }
+    | ID MINUSEQ expressao ';'            { $$ = { atrib: $1, op: '-=', valor: $3 }; }
+    | ID MULTEQ expressao ';'             { $$ = { atrib: $1, op: '*=', valor: $3 }; }
+    | ID DIVEQ expressao ';'              { $$ = { atrib: $1, op: '/=', valor: $3 }; }
+    | ID INC ';'                          { $$ = { op: 'inc', var: $1 }; }
+    | ID DEC ';'                          { $$ = { op: 'dec', var: $1 }; }
+
+    // Atribuição a elemento de array
+    | ID '[' expressao ']' '=' expressao ';'  { $$ = { array_assign: { nome: $1, index: $3, valor: $6 } }; }
+
+    | PRINTF '(' expressao_list ')' ';'  { $$ = { call: { nome: "printf", args: $3 } }; }
+    | SCANF '(' expressao_list ')' ';'   { $$ = { call: { nome: "scanf", args: $3 } }; }
+
+    | RETURN expressao ';'                { $$ = { return: $2 }; }
+    | BREAK ';' { $$ = { comando: 'break' }; }
+
+// IF / ELSE — versão corrigida
+| IF '(' expressao ')' comando
+    { $$ = { if: { cond: $3, then: [$5] } }; }
+
+| IF '(' expressao ')' comando ELSE comando
+    { $$ = { if: { cond: $3, then: [$5], else: [$7] } }; }
+
+| IF '(' expressao ')' '{' comandos '}'
+    { $$ = { if: { cond: $3, then: $6 } }; }
+
+| IF '(' expressao ')' '{' comandos '}' ELSE comando
+    { $$ = { if: { cond: $3, then: $6, else: [$8] } }; }
+
+| IF '(' expressao ')' comando ELSE '{' comandos '}'
+    { $$ = { if: { cond: $3, then: [$5], else: $8 } }; }
+
+| IF '(' expressao ')' '{' comandos '}' ELSE '{' comandos '}'
+    { $$ = { if: { cond: $3, then: $6, else: $10 } }; }
+
+
+    // Loops
+    | WHILE '(' expressao ')' comando        { $$ = { while: $3, corpo: $5 }; }
+    | DO comando WHILE '(' expressao ')' ';' { $$ = { do_while: { corpo: $2, cond: $5 } }; }
+    | FOR '(' for_inicio ';' expressao ';' for_incremento ')' comando
+        { $$ = { for: { inicio: $3, cond: $5, passo: $7, corpo: $9 } }; }
+
+    | SWITCH '(' expressao ')' '{' casos '}' 
+        { $$ = { switch: { expr: $3, casos: $6 } }; }
+
+    | ID '(' expressao_list ')' ';'    { $$ = { call: { nome: $1, args: $3 } }; }
+    | ID '(' ')' ';'                   { $$ = { call: { nome: $1, args: [] } }; }
+
+
+    // Bloco de comandos
+    | '{' comandos '}'                       { $$ = $2; }
+    ;
+
+for_inicio
+    : tipo declaracao_lista          { $$ = { tipo: $1, vars: $2 }; }
+    | ID '=' expressao               { $$ = { atrib: $1, valor: $3 }; }
+    | /* vazio */                    { $$ = null; }
+    ;
+
+for_incremento
+    : ID '=' expressao          { $$ = { atrib: $1, valor: $3 }; }
+    | ID INC                    { $$ = { op: 'inc', var: $1 }; }
+    | ID DEC                    { $$ = { op: 'dec', var: $1 }; }
+    | expressao                 { $$ = $1; }
+    ;
+
+casos
+    : casos case_item        { $$ = $1.concat([$2]); }
+    | case_item              { $$ = [$1]; }
+    ;
+
+case_item
+    // CASE com corpo
+    : CASE expressao ':' comandos
+        { $$ = { case: $2, corpo: $4 }; }
+
+    // CASE vazio (fallthrough)
+    | CASE expressao ':'
+        { $$ = { case: $2, corpo: [] }; }
+
+    // DEFAULT com corpo
+    | DEFAULT ':' comandos
+        { $$ = { default: true, corpo: $3 }; }
+
+    // DEFAULT vazio (raro, mas válido)
+    | DEFAULT ':'
+        { $$ = { default: true, corpo: [] }; }
+    ;
+
+
+// Expressões
+expressao
+    : ID '[' expressao ']'        { $$ = { array_access: { nome: $1, index: $3 } }; }
+    | ID '(' expressao_list ')'   { $$ = { call: { nome: $1, args: $3 } }; }
+    | ID '(' ')'                  { $$ = { call: { nome: $1, args: [] } }; }
+    | '&' ID               { $$ = { ref: true, var: $2 }; }
+    | ID '(' expressao_list ')'   { $$ = { call: { nome: $1, args: $3 } }; }
+    | ID '(' ')'                  { $$ = { call: { nome: $1, args: [] } }; }
+
+
+
+    | '(' tipo '*' ')' expressao   { $$ = { cast: { tipo: $2 + '*', valor: $5 } }; }
+    | '(' tipo ')' expressao       { $$ = { cast: { tipo: $2, valor: $4 } }; }
+
+    // sizeof(tipo)
+    | SIZEOF '(' tipo ')'             { $$ = { op: 'sizeof', tipo: $3 }; }
+
+    // sizeof(expressao)
+    | SIZEOF '(' expressao ')'        { $$ = { op: 'sizeof', valor: $3 }; }
+
+
+    | expressao '+' expressao     { $$ = { op: '+', left: $1, right: $3 }; }
+    | expressao '-' expressao     { $$ = { op: '-', left: $1, right: $3 }; }
+    | expressao '*' expressao     { $$ = { op: '*', left: $1, right: $3 }; }
+    | expressao '/' expressao     { $$ = { op: '/', left: $1, right: $3 }; }
+    | expressao '%' expressao     { $$ = { op: '%', left: $1, right: $3 }; }
+
+    | expressao '<' expressao     { $$ = { op: '<', left: $1, right: $3 }; }
+    | expressao '>' expressao     { $$ = { op: '>', left: $1, right: $3 }; }
+    | expressao EQ expressao      { $$ = { op: '==', left: $1, right: $3 }; }
+    | expressao NE expressao      { $$ = { op: '!=', left: $1, right: $3 }; }
+    | expressao LE expressao      { $$ = { op: '<=', left: $1, right: $3 }; }
+    | expressao GE expressao      { $$ = { op: '>=', left: $1, right: $3 }; }
+
+    | expressao AND expressao     { $$ = { op: '&&', left: $1, right: $3 }; }
+    | expressao OR expressao      { $$ = { op: '||', left: $1, right: $3 }; }
+    | NOT expressao               { $$ = { op: '!', value: $2 }; }
+    | '-' expressao               { $$ = { op: 'neg', value: $2 }; }
+
+    | '(' expressao ')'           { $$ = $2; }
+
+    | NUM                         { $$ = $1; }
+    | FLOAT                       { $$ = $1; }
+    | CHAR                        { $$ = $1; }
+    | STRING                      { $$ = $1; }
+    | ID                          { $$ = { var: $1 }; }
+    | STRUCT ID      { $$ = 'struct ' + $2; }  // ✅ Struct como tipo
+
+    ;
